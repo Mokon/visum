@@ -1,0 +1,22 @@
+#!/bin/bash
+# Copyright (C) 2013-2016 David 'Mokon' Bond, All Rights Reserved
+
+function deploy_hook {
+    local hook=$1
+
+    if [ -L .git/hooks/$hook ] ; then
+        link=$(readlink -f .git/hooks/$hook)
+        if [ "$link " != "../../tools/hooks/$hook" ] ; then
+            echo "unknown $hook symlink exists"
+            exit -1
+        fi
+    elif [ -e .git/hooks/$hook ] ; then
+        echo "unknown $hook script exists"
+        exit -1
+    else
+        ln -s ../../tools/hooks/$hook .git/hooks/$hook
+    fi
+}
+
+deploy_hook pre-commit
+deploy_hook commit-msg

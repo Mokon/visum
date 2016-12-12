@@ -1,0 +1,64 @@
+#!/bin/bash
+# Copyright (C) 2013-2016 David 'Mokon' Bond, All Rights Reserved
+
+if ! ROOT=`git rev-parse --show-toplevel 2> /dev/null` ; then
+  ROOT=`pwd`
+fi
+
+pushd $ROOT/build &> /dev/null
+
+OPTS=`getopt -o hgsv -l help,gdb,static,valgrind -- "$@"`
+
+if [ $? != 0 ] ; then
+  echo "getopt error"
+  exit -1
+fi
+
+eval set -- "$OPTS"
+
+GDB=0
+STATIC=0
+VALGRIND=0
+
+function usage {
+  echo "Usage: [options]"
+  echo -e "\t-h, --help, --usage:\tDisplays this help message"
+  echo -e "\t-g, --gdb:\t\tRuns the visum server with gdb"
+  echo -e "\t-s, --static:\t\tPipe a static graph into visum server"
+  echo -e "\t-v, --valgrind:\t\tRuns the visum server with valgrind"
+}
+
+while true ; do
+  case "$1" in
+  -h|--help|--usage|\?) usage && exit 0 ;;
+  -g|--gdb) GDB=1 ; shift ;;
+  -s|--static) STATIC=1 ; shift ;;
+  -v|--valgrind) VALGRIND=1 ; shift ;;
+  --) shift ; break ;;
+  *) echo "options error"; exit -1;;
+  esac
+done
+
+shift $((OPTIND-1))
+
+[ "$1" = "--" ] && shift
+
+if [ ! -p pipe ] ; then
+  mkfifo pipe
+fi
+
+if [ $GDB -ne 0 ] ; then
+  gdb -ex 'set args < pipe' ./visum_server
+elif [ $VALGRIND -ne 0 ] ; then
+  valgrind --track-origins=yes --leak-check=full  --show-reachable=yes \
+           --num-callers=100 ./visum_server < pipe
+else
+  ./visum_server < pipe
+  #| ../src/visum/ui/visum_display.js
+fi
+
+if [ $STATIC -ne 0 ] ; then
+  ./visum_static_graph > pipe &
+fi
+   
+popd &> /dev/null

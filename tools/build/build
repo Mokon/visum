@@ -1,0 +1,111 @@
+#!/bin/sh
+# Copyright (C) 2013-2016 David 'Mokon' Bond, All Rights Reserved
+
+reset
+
+echo "running visum build script"
+
+if ! ROOT=`git rev-parse --show-toplevel 2> /dev/null` ; then
+  ROOT=`pwd`
+fi
+
+mkdir -p $ROOT/build
+pushd $ROOT/build &> /dev/null
+
+OPTS=`getopt -o hbdric -l help,debug,rebuild,debug,release,install,clean -- "$@"`
+
+if [ $? != 0 ] ; then
+    echo "getopt error"
+    exit -1
+fi
+
+eval set -- "$OPTS"
+
+if [ -f Makefile ] ; then
+    REBUILD=0
+else
+    REBUILD=1
+fi
+RELEASE=0
+INSTALL=0
+DEBUG=0
+CLEAN=0
+
+function usage {
+  echo "Usage: [options]"
+  echo -e "\t-h, --help, --usage:\tDisplays this help message"
+  echo -e "\t-b, --rebuild:\t\tRebuilds everything from stratch"
+  echo -e "\t-d, --debug:\t\tBuilds a debug image"
+  echo -e "\t-r, --release:\t\tBuilds a release image"
+  echo -e "\t-i, --install:\t\tInstalls the image"
+  echo -e "\t-c, --clean:\t\tCleans the repo"
+}
+
+while true ; do
+    case "$1" in
+    -h|--help|--usage) usage && exit 0 ;;
+    -b|--rebuild) REBUILD=1 ; shift ;;
+    -d|--debug)   DEBUG=1 ; shift ;;
+    -r|--release) RELEASE=1 ; shift ;;
+    -i|--install) INSTALL=1 ; shift ;;
+    -c|--clean)   CLEAN=1 ; shift ;;
+    --) shift ; break ;;
+    *) echo "option error"; exit -1;;
+    esac
+done
+
+shift $((OPTIND-1))
+
+[ "$1" = "--" ] && shift
+
+if [ $REBUILD -ne 0 ] ; then
+    if [ $RELEASE -eq 0 ] ; then
+        DEBUG=1
+    elif [ $DEBUG -eq $RELEASE ] ; then
+        echo "debug and release match error"
+        exit -1
+    fi
+
+
+    if [ -f Makefile ] ; then
+        echo "visum purge"
+        cd ..
+        /bin/rm -rf build
+        mkdir -p build
+        cd build
+    fi
+
+    echo "visum bootstrap"
+    /bin/cp ../tools/build/configure.ac .
+    /bin/cp ../tools/build/Makefile.am .
+    ../tools/build/bootstrap
+
+    echo "visum configure"
+    if [ $DEBUG -ne 0 ] ; then
+        ./configure --disable-static --enable-shared --enable-debug --prefix=/
+    elif [ $RELEASE -ne 0 ] ; then
+        ./configure --disable-static --enable-shared --disable-debug --prefix=/
+    fi
+elif [ $DEBUG -eq 1 -o $RELEASE -eq 1 ] ; then
+    echo "you cannot specify release or debug unless you are rebuilding"
+    exit -1
+fi
+
+if [ $CLEAN -ne 0 ] ; then
+    echo "visum clean"
+    make clean
+    cd ..
+    /bin/rm -rf build
+    mkdir -p build
+    cd build
+else
+    echo "visum make"
+    make
+
+    if [ $INSTALL -ne 0 ] ; then
+        echo "visum make install"
+        make install
+    fi
+fi
+
+popd &> /dev/null
